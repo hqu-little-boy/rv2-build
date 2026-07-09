@@ -7,12 +7,64 @@ on:
         description: 'Release version (e.g., v1.0.0-manual-20260709)'
         required: true
         type: string
+      test_release:
+        description: '目标发行版 (选择 all 则构建所有)'
+        required: true
+        type: choice
+        options:
+          - all
+          - trixie
+          - resolute
+          - noble
+          - bookworm
+      test_kernel_branch:
+        description: '目标内核分支 (选择 all 则构建所有)'
+        required: true
+        type: choice
+        options:
+          - all
+          - legacy
+          - current
+          - edge
   push:
     tags:
       - 'v*'
 
 jobs:
+  # 🛠️ 新增：动态决定需要构建的矩阵组合
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      releases: ${{ steps.set-vars.outputs.releases }}
+      kernels: ${{ steps.set-vars.outputs.kernels }}
+    steps:
+      - name: 计算矩阵组合
+        id: set-vars
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            REL="${{ github.event.inputs.test_release }}"
+            KER="${{ github.event.inputs.test_kernel_branch }}"
+            
+            if [ "$REL" != "all" ]; then
+              echo "releases=[\"$REL\"]" >> $GITHUB_OUTPUT
+            else
+              echo "releases=[\"trixie\", \"resolute\", \"noble\", \"bookworm\"]" >> $GITHUB_OUTPUT
+            fi
+            
+            if [ "$KER" != "all" ]; then
+              echo "kernels=[\"$KER\"]" >> $GITHUB_OUTPUT
+            else
+              echo "kernels=[\"legacy\", \"current\", \"edge\"]" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Push 标签触发时，默认全量构建
+            echo "releases=[\"trixie\", \"resolute\", \"noble\", \"bookworm\"]" >> $GITHUB_OUTPUT
+            echo "kernels=[\"legacy\", \"current\", \"edge\"]" >> $GITHUB_OUTPUT
+          fi
+
+  # 🏗️ 构建任务：根据 setup-matrix 的输出生成矩阵
   build:
+    needs: setup-matrix
     runs-on: ubuntu-latest
     timeout-minutes: 720
     permissions:
@@ -21,8 +73,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release: [trixie, resolute, noble, bookworm]
-        kernel_branch: [legacy, current, edge]
+        # 🧠 核心逻辑：将上一步输出的 JSON 字符串解析为数组
+        release: ${{ fromJSON(needs.setup-matrix.outputs.releases) }}
+        kernel_branch: ${{ fromJSON(needs.setup-matrix.outputs.kernels) }}
 
     steps:
       - uses: armbian/build@main
@@ -35,6 +88,7 @@ jobs:
           armbian_ui: "server"
           armbian_runner_clean: "yes"
 
+  # 📦 发布任务 (保持原有逻辑不变)
   release:
     needs: build
     runs-on: ubuntu-latest
