@@ -6,15 +6,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     # ⚠️ 关键优化：增加超时时间
     # 使用 x86_64 交叉编译 RISC-V (orangepirv2) 非常耗时，默认的 6 小时 (360分钟) 可能会超时失败。
     # 这里将其设置为 12 小时 (720分钟)。
-    timeout-minutes: 720 
-    
+    timeout-minutes: 720
+
     strategy:
       # 即使某个组合编译失败，也不取消其他任务
-      fail-fast: false 
+      fail-fast: false
       matrix:
         # 定义 Release 维度
         release: [trixie, resolute, noble, bookworm]
@@ -26,11 +26,11 @@ jobs:
         with:
           armbian_token: ${{ secrets.GITHUB_TOKEN }}
           armbian_board: "orangepirv2"
-          
+
           # 动态传入矩阵变量
           armbian_release: ${{ matrix.release }}
           armbian_kernel_branch: ${{ matrix.kernel_branch }} # 新增：指定内核分支
-          
+
           armbian_target: "build"
           armbian_ui: "server"
           armbian_runner_clean: "yes" # 清理磁盘空间
